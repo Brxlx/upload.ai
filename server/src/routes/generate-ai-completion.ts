@@ -1,4 +1,4 @@
-import { createReadStream } from 'node:fs';
+import { streamToResponse, OpenAIStream } from 'ai';
 
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../lib/prsima';
@@ -9,11 +9,11 @@ export async function generateAiCompletionRoute(app: FastifyInstance) {
   app.post('/ai/generate', async (req, reply) => {
     const bodySchema = z.object({
       videoId: z.string().cuid(),
-      template: z.string(),
+      prompt: z.string(),
       temperature: z.number().min(0).max(1).default(0.5),
     });
 
-    const { videoId, template, temperature } = bodySchema.parse(req.body);
+    const { videoId, prompt: template, temperature } = bodySchema.parse(req.body);
 
     const video = await prisma.video.findUniqueOrThrow({
       where: {
@@ -35,8 +35,17 @@ export async function generateAiCompletionRoute(app: FastifyInstance) {
           content: promptMessage,
         },
       ],
+      stream: true,
     });
 
-    return response;
+    const stream = OpenAIStream(response);
+
+    streamToResponse(stream, reply.raw, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': '*',
+        // 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      },
+    });
   });
 }
